@@ -1,4 +1,5 @@
 use config::{Config, File, FileFormat};
+use secrecy::SecretBox;
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
@@ -6,10 +7,10 @@ pub struct Settings {
     pub application_port: u16,
 }
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(serde::Deserialize)]
 pub struct DatabaseSettings {
     pub username: String,
-    pub password: String,
+    pub password: SecretBox<std::string::String>,
     pub port: u16,
     pub host: String,
     pub database_name: String,
@@ -24,10 +25,15 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
 }
 
 impl DatabaseSettings {
-    pub fn connection_string(&self) -> String {
-        format!(
+    pub fn connection_string(
+        &self,
+        username: &str,
+        password: &str,
+        database_name: &str,
+    ) -> SecretBox<String> {
+        SecretBox::new(Box::new(format!(
             "postgres://{}:{}@{}:{}/{}",
-            self.username, self.password, self.host, self.port, self.database_name
-        )
+            username, password, self.host, self.port, database_name
+        )))
     }
 }
