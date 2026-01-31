@@ -1,5 +1,7 @@
-use config::{Config, File};
+use config::{Config, Environment as OtherEnvironment, File};
 use secrecy::SecretBox;
+use serde_aux::field_attributes::deserialize_number_from_string;
+use sqlx::postgres::{PgConnectOptions, PgSslMode};
 
 #[derive(serde::Deserialize)]
 pub struct Settings {
@@ -9,15 +11,18 @@ pub struct Settings {
 
 #[derive(serde::Deserialize)]
 pub struct DatabaseSettings {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    pub port: u16,
     pub username: String,
     pub password: SecretBox<std::string::String>,
-    pub port: u16,
     pub host: String,
     pub database_name: String,
+    pub require_ssl: bool,
 }
 
 #[derive(serde::Deserialize)]
 pub struct ApplicationSettings {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     pub port: u16,
     pub host: String,
 }
@@ -36,21 +41,35 @@ pub fn get_configuration() -> Result<Settings, config::ConfigError> {
         .add_source(File::from(
             configuration_directory.join(environment_filename),
         ))
+        .add_source(
+            OtherEnvironment::with_prefix("APP")
+                .prefix_separator("_")
+                .separator("__"),
+        )
         .build()?;
     settings.try_deserialize::<Settings>()
 }
 
 impl DatabaseSettings {
-    pub fn connection_string(
+    pub fn connect_options(
         &self,
         username: &str,
         password: &str,
         database_name: &str,
-    ) -> SecretBox<String> {
-        SecretBox::new(Box::new(format!(
-            "postgres://{}:{}@{}:{}/{}",
-            username, password, self.host, self.port, database_name
-        )))
+    ) -> PgConnectOptions {
+        let ssl_mode = if self.require_ssl {
+            PgSslMode::Require
+        } else {
+            PgSslMode::Prefer
+        };
+        PgConnectOptions::new()
+            .host(&self.host)
+            .username(username)
+            .password(password)
+            .port(self.port)
+            .database(database_name)
+            .ssl_mode(ssl_mode)
+            .database(&self.database_name)
     }
 }
 

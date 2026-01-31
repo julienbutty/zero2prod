@@ -121,24 +121,21 @@ async fn subscribe_return_a_400_when_data_is_missing() {
 }
 
 pub async fn configure_database(config: DatabaseSettings) -> PgPool {
-    let mut connection = PgConnection::connect(
-        config
-            .connection_string("postgres", "password", "postgres")
-            .expose_secret(),
-    )
-    .await
-    .expect("Failed to connect to postgres");
+    let mut connection =
+        PgConnection::connect_with(&config.connect_options("postgres", "password", "postgres"))
+            .await
+            .expect("Failed to connect to postgres");
 
     connection
         .execute(format!(r#"CREATE DATABASE "{}";"#, config.database_name).as_str())
         .await
         .expect("Failed to create database");
 
-    let mut super_connection = PgConnection::connect(
-        config
-            .connection_string("postgres", "password", &config.database_name)
-            .expose_secret(),
-    )
+    let mut super_connection = PgConnection::connect_with(&config.connect_options(
+        "postgres",
+        "password",
+        &config.database_name,
+    ))
     .await
     .expect("Failed to connect as super user");
 
@@ -147,15 +144,11 @@ pub async fn configure_database(config: DatabaseSettings) -> PgPool {
         .await
         .expect("Failed to grant app user");
 
-    let connection_pool = PgPool::connect(
-        config
-            .connection_string(
-                &config.username,
-                config.password.expose_secret(),
-                &config.database_name,
-            )
-            .expose_secret(),
-    )
+    let connection_pool = PgPool::connect_with(config.connect_options(
+        &config.username,
+        config.password.expose_secret(),
+        &config.database_name,
+    ))
     .await
     .expect("Failed to connect to postgres");
 
